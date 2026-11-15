@@ -1,0 +1,58 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Unzip project
+        run: |
+          unzip -q scanlite.zip -d unpacked
+          ls -R unpacked | head -50
+
+      - name: Find project folder
+        id: find
+        run: |
+          PUB=$(find unpacked -name pubspec.yaml -not -path "*/.*" | head -1)
+          DIR=$(dirname "$PUB")
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Create missing platform files
+        working-directory: ${{ steps.find.outputs.dir }}
+        run: |
+          if [ ! -f android/gradle/wrapper/gradle-wrapper.properties ]; then
+            flutter create --platforms=android --project-name scanlite .
+          fi
+
+      - name: Get packages
+        working-directory: ${{ steps.find.outputs.dir }}
+        run: flutter pub get
+
+      - name: Build APK
+        working-directory: ${{ steps.find.outputs.dir }}
+        run: flutter build apk --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: scanlite-apk
+          path: ${{ steps.find.outputs.dir }}/build/app/outputs/flutter-apk/app-release.apk
